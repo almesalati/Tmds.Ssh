@@ -33,20 +33,40 @@ static class AlgorithmNames // TODO: rename to KnownNames
     public static Name EcdsaSha2Nistp384 => new Name(EcdsaSha2Nistp384Bytes);
     private static readonly byte[] EcdsaSha2Nistp521Bytes = "ecdsa-sha2-nistp521"u8.ToArray();
     public static Name EcdsaSha2Nistp521 => new Name(EcdsaSha2Nistp521Bytes);
+    private static readonly byte[] SshEd25519Bytes = "ssh-ed25519"u8.ToArray();
+    public static Name SshEd25519 => new Name(SshEd25519Bytes);
 
     // Encryption algorithms.
+    private static readonly byte[] Aes128CbcBytes = "aes128-cbc"u8.ToArray();
+    public static Name Aes128Cbc => new Name(Aes128CbcBytes);
+    private static readonly byte[] Aes192CbcBytes = "aes192-cbc"u8.ToArray();
+    public static Name Aes192Cbc => new Name(Aes192CbcBytes);
+    private static readonly byte[] Aes256CbcBytes = "aes256-cbc"u8.ToArray();
+    public static Name Aes256Cbc => new Name(Aes256CbcBytes);
+    private static readonly byte[] Aes128CtrBytes = "aes128-ctr"u8.ToArray();
+    public static Name Aes128Ctr => new Name(Aes128CtrBytes);
+    private static readonly byte[] Aes192CtrBytes = "aes192-ctr"u8.ToArray();
+    public static Name Aes192Ctr => new Name(Aes192CtrBytes);
+    private static readonly byte[] Aes256CtrBytes = "aes256-ctr"u8.ToArray();
+    public static Name Aes256Ctr => new Name(Aes256CtrBytes);
     private static readonly byte[] Aes128GcmBytes = "aes128-gcm@openssh.com"u8.ToArray();
     public static Name Aes128Gcm => new Name(Aes128GcmBytes);
     private static readonly byte[] Aes256GcmBytes = "aes256-gcm@openssh.com"u8.ToArray();
     public static Name Aes256Gcm => new Name(Aes256GcmBytes);
+    private static readonly byte[] ChaCha20Poly1305Bytes = "chacha20-poly1305@openssh.com"u8.ToArray();
+    public static Name ChaCha20Poly1305 => new Name(ChaCha20Poly1305Bytes);
+
+    // KDF algorithms:
+    private static readonly byte[] BCryptBytes = "bcrypt"u8.ToArray();
+    public static Name BCrypt => new Name(BCryptBytes);
 
     // Mac algorithms.
     private static readonly byte[] HMacSha2_256Bytes = "hmac-sha2-256"u8.ToArray();
     public static Name HMacSha2_256 => new Name(HMacSha2_256Bytes);
 
     // Curve names.
-    private static readonly byte[] Nistp265Bytes = "nistp256"u8.ToArray();
-    public static Name Nistp265 => new Name(Nistp265Bytes);
+    private static readonly byte[] Nistp256Bytes = "nistp256"u8.ToArray();
+    public static Name Nistp256 => new Name(Nistp256Bytes);
     private static readonly byte[] Nistp384Bytes = "nistp384"u8.ToArray();
     public static Name Nistp384 => new Name(Nistp384Bytes);
     private static readonly byte[] Nistp521Bytes = "nistp521"u8.ToArray();
@@ -59,11 +79,13 @@ static class AlgorithmNames // TODO: rename to KnownNames
     // Authentications
     private static readonly byte[] GssApiWithMicBytes = "gssapi-with-mic"u8.ToArray();
     public static Name GssApiWithMic => new Name(GssApiWithMicBytes);
-
+    private static readonly byte[] HostBasedBytes = "hostbased"u8.ToArray();
+    public static Name HostBased => new Name(HostBasedBytes);
+    private static readonly byte[] KeyboardInteractiveBytes = "keyboard-interactive"u8.ToArray();
+    public static Name KeyboardInteractive => new Name(KeyboardInteractiveBytes);
     private static readonly byte[] PasswordBytes = "password"u8.ToArray();
     public static Name Password => new Name(PasswordBytes);
-
     private static readonly byte[] PublicKeyBytes = "publickey"u8.ToArray();
     public static Name PublicKey => new Name(PublicKeyBytes);
-    
+
 }

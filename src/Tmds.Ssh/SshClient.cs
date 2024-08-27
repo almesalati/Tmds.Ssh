@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace Tmds.Ssh;
 
@@ -16,7 +17,13 @@ public sealed partial class SshClient : IDisposable
     private readonly object _gate = new object();
     private SshSession? _session;
     private Task<SshSession>? _connectingTask;
-    private readonly SshClientSettings _clientSettings;
+    private readonly bool _autoConnect;
+    private readonly bool _autoReconnect;
+    private readonly TimeSpan _connectTimeout;
+    private readonly SshClientSettings? _settings;
+    private readonly string? _destination;
+    private readonly SshConfigOptions? _sshConfigOptions;
+    private readonly SshLoggers _loggers;
     private State _state = State.Initial;
 
     enum State
@@ -31,14 +38,44 @@ public sealed partial class SshClient : IDisposable
     // For testing.
     internal bool IsDisposed => _state == State.Disposed;
 
-    public SshClient(SshClientSettings settings)
+    public SshClient(string destination, ILoggerFactory? loggerFactory = null) :
+        this(destination, SshConfigOptions.DefaultConfig, loggerFactory)
+    { }
+
+    public SshClient(SshClientSettings settings, ILoggerFactory? loggerFactory = null) :
+        this(settings, destination: null, configOptions: null,
+             settings?.AutoConnect ?? default, settings?.AutoReconnect ?? default, settings?.ConnectTimeout ?? default,
+             loggerFactory)
     {
-        _clientSettings = settings ?? throw new ArgumentNullException(nameof(settings));
+        ArgumentNullException.ThrowIfNull(settings);
     }
 
-    public SshClient(string destination)
-        : this(new SshClientSettings(destination))
-    { }
+    public SshClient(string destination, SshConfigOptions sshConfigOptions, ILoggerFactory? loggerFactory = null) :
+        this(settings: null, destination, sshConfigOptions,
+             sshConfigOptions?.AutoConnect ?? default, sshConfigOptions?.AutoReconnect ?? default, sshConfigOptions?.ConnectTimeout ?? default,
+             loggerFactory)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(sshConfigOptions);
+    }
+
+    private SshClient(
+        SshClientSettings? settings,
+        string? destination,
+        SshConfigOptions? configOptions,
+        bool autoConnect,
+        bool autoReconnect,
+        TimeSpan connectTimeout,
+        ILoggerFactory? loggerFactory)
+    {
+        _settings = settings;
+        _destination = destination;
+        _sshConfigOptions = configOptions;
+        _autoConnect = autoConnect;
+        _autoReconnect = autoReconnect;
+        _connectTimeout = connectTimeout;
+        _loggers = new SshLoggers(loggerFactory);
+    }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -57,7 +94,7 @@ public sealed partial class SshClient : IDisposable
             State state = _state;
 
             if (state == State.Connected ||
-                (state == State.Disconnected && !_clientSettings.AutoReconnect))
+                (state == State.Disconnected && !_autoReconnect))
             {
                 return new ValueTask<SshSession>(_session!);
             }
@@ -74,7 +111,7 @@ public sealed partial class SshClient : IDisposable
                 throw NewObjectDisposedException();
             }
 
-            if (!explicitConnect && !_clientSettings.AutoConnect && (state == State.Initial || state == State.Connecting))
+            if (!explicitConnect && !_autoConnect && (state == State.Initial || state == State.Connecting))
             {
                 throw new InvalidOperationException($"{nameof(ConnectAsync)} must be called and awaited.");
             }
@@ -130,13 +167,13 @@ public sealed partial class SshClient : IDisposable
         Debug.Assert(Monitor.IsEntered(_gate));
         Debug.Assert(_state == State.Connecting);
 
-        SshSession session = new SshSession(_clientSettings, this);
+        SshSession session = new SshSession(_settings, _destination, _sshConfigOptions, this, _loggers);
         _session = session;
 
         bool success = false;
         try
         {
-            await session.ConnectAsync(cancellationToken);
+            await session.ConnectAsync(_connectTimeout, cancellationToken);
             success = true;
             return session;
         }

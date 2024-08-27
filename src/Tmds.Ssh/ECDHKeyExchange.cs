@@ -3,13 +3,11 @@
 
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Numerics;
-using System.Text;
 
 namespace Tmds.Ssh;
 
@@ -47,15 +45,14 @@ class ECDHKeyExchange : IKeyExchangeAlgorithm
 
         // Verify received key is valid.
         connectionInfo.ServerKey = ecdhReply.public_host_key;
-        bool isTrusted = await hostKeyVerification.VerifyAsync(connectionInfo, ct).ConfigureAwait(false);
-        if (!isTrusted)
-        {
-            string knownHostsLine = KnownHostsFile.FormatLine(connectionInfo.Host, connectionInfo.Port, connectionInfo.ServerKey);
-            string message = $"The host '{knownHostsLine}' is not trusted.";
-            throw new ConnectFailedException(ConnectFailedReason.UntrustedPeer, message, connectionInfo);
-        }
+        await hostKeyVerification.VerifyAsync(connectionInfo, ct).ConfigureAwait(false);
 
         var publicHostKey = PublicKey.CreateFromSshKey(ecdhReply.public_host_key);
+        if (publicHostKey is RsaPublicKey rsaPublicKey && rsaPublicKey.KeySize < input.MinimumRSAKeySize)
+        {
+            throw new ConnectFailedException(ConnectFailedReason.KeyExchangeFailed, $"Server RSA key size {rsaPublicKey.KeySize} is less than {input.MinimumRSAKeySize}.", connectionInfo);
+        }
+
         // Compute shared secret.
         BigInteger sharedSecret;
         try
@@ -77,12 +74,12 @@ class ECDHKeyExchange : IKeyExchangeAlgorithm
         }
 
         byte[] sessionId = input.ConnectionInfo.SessionId ?? exchangeHash;
-        byte[] initialIVC2S = Hash(sequencePool, sharedSecret, exchangeHash, (byte)'A', sessionId, input.InitialIVC2SLength);
-        byte[] initialIVS2C = Hash(sequencePool, sharedSecret, exchangeHash, (byte)'B', sessionId, input.InitialIVS2CLength);
-        byte[] encryptionKeyC2S = Hash(sequencePool, sharedSecret, exchangeHash, (byte)'C', sessionId, input.EncryptionKeyC2SLength);
-        byte[] encryptionKeyS2C = Hash(sequencePool, sharedSecret, exchangeHash, (byte)'D', sessionId, input.EncryptionKeyS2CLength);
-        byte[] integrityKeyC2S = Hash(sequencePool, sharedSecret, exchangeHash, (byte)'E', sessionId, input.IntegrityKeyC2SLength);
-        byte[] integrityKeyS2C = Hash(sequencePool, sharedSecret, exchangeHash, (byte)'F', sessionId, input.IntegrityKeyS2CLength);
+        byte[] initialIVC2S = CalculateKey(sequencePool, sharedSecret, exchangeHash, (byte)'A', sessionId, input.InitialIVC2SLength);
+        byte[] initialIVS2C = CalculateKey(sequencePool, sharedSecret, exchangeHash, (byte)'B', sessionId, input.InitialIVS2CLength);
+        byte[] encryptionKeyC2S = CalculateKey(sequencePool, sharedSecret, exchangeHash, (byte)'C', sessionId, input.EncryptionKeyC2SLength);
+        byte[] encryptionKeyS2C = CalculateKey(sequencePool, sharedSecret, exchangeHash, (byte)'D', sessionId, input.EncryptionKeyS2CLength);
+        byte[] integrityKeyC2S = CalculateKey(sequencePool, sharedSecret, exchangeHash, (byte)'E', sessionId, input.IntegrityKeyC2SLength);
+        byte[] integrityKeyS2C = CalculateKey(sequencePool, sharedSecret, exchangeHash, (byte)'F', sessionId, input.IntegrityKeyS2CLength);
 
         return new KeyExchangeOutput(exchangeHash,
             initialIVS2C, encryptionKeyS2C, integrityKeyS2C,
@@ -120,14 +117,13 @@ class ECDHKeyExchange : IKeyExchangeAlgorithm
         return hash.GetHashAndReset();
     }
 
-    private byte[] Hash(SequencePool sequencePool, BigInteger sharedSecret, byte[] exchangeHash, byte c, byte[] sessionId, int hashLength)
+    private byte[] CalculateKey(SequencePool sequencePool, BigInteger sharedSecret, byte[] exchangeHash, byte c, byte[] sessionId, int keyLength)
     {
         // https://tools.ietf.org/html/rfc4253#section-7.2
 
-        byte[] hashRv = new byte[hashLength];
-        int hashOffset = 0;
+        byte[] key = new byte[keyLength];
+        int keyOffset = 0;
 
-        // TODO: handle 'If the key length needed is longer than the output of the HASH'
         // HASH(K || H || c || session_id)
         using Sequence sequence = sequencePool.RentSequence();
         var writer = new SequenceWriter(sequence);
@@ -142,16 +138,28 @@ class ECDHKeyExchange : IKeyExchangeAlgorithm
             hash.AppendData(segment.Span);
         }
         byte[] K1 = hash.GetHashAndReset();
-        Append(hashRv, K1, ref hashOffset);
+        Append(key, K1, ref keyOffset);
 
-        while (hashOffset != hashRv.Length)
+        while (keyOffset != key.Length)
         {
-            // TODO: handle 'If the key length needed is longer than the output of the HASH'
+            sequence.Clear();
+
             // K3 = HASH(K || H || K1 || K2)
-            throw new NotSupportedException();
+            writer = new SequenceWriter(sequence);
+            writer.WriteMPInt(sharedSecret);
+            writer.Write(exchangeHash);
+            writer.Write(key.AsSpan(0, keyOffset));
+
+            foreach (var segment in sequence.AsReadOnlySequence())
+            {
+                hash.AppendData(segment.Span);
+            }
+            byte[] Kn = hash.GetHashAndReset();
+
+            Append(key, Kn, ref keyOffset);
         }
 
-        return hashRv;
+        return key;
 
         static void Append(byte[] key, byte[] append, ref int offset)
         {

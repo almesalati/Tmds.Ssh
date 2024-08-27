@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 
 namespace Tmds.Ssh;
 
@@ -84,11 +83,13 @@ sealed class EncryptionAlgorithm
                         => new AesGcmPacketDecoder(sequencePool, key, iv, algorithm.TagLength),
                         isAuthenticated: true,
                         tagLength: 16) },
+            { AlgorithmNames.ChaCha20Poly1305,
+                new EncryptionAlgorithm(keyLength: 512 / 8, ivLength: 0,
+                    (EncryptionAlgorithm algorithm, byte[] key, byte[] iv, HMacAlgorithm? hmac, byte[] hmacKey)
+                        => new ChaCha20Poly1305PacketEncoder(key),
+                    (EncryptionAlgorithm algorithm, SequencePool sequencePool, byte[] key, byte[] iv, HMacAlgorithm? hmac, byte[] hmacKey)
+                        => new ChaCha20Poly1305PacketDecoder(sequencePool, key),
+                        isAuthenticated: true,
+                        tagLength: ChaCha20Poly1305PacketEncoder.TagSize) },
         };
-
-    private static IPacketEncoder CreatePacketEncoder(IDisposableCryptoTransform encodeTransform, IHMac hmac)
-        => new TransformAndHMacPacketEncoder(encodeTransform, hmac);
-
-    private static IPacketDecoder CreatePacketDecoder(SequencePool sequencePool, IDisposableCryptoTransform encodeTransform, IHMac hmac)
-        => new TransformAndHMacPacketDecoder(sequencePool, encodeTransform, hmac);
 }

@@ -2,14 +2,13 @@
 // See file LICENSE for full license details.
 
 using System;
-using System.Buffers;
 using System.Text;
 
 namespace Tmds.Ssh;
 
 // Internal names used to identify algorithms or protocols are normally
 // never displayed to users, and must be in US-ASCII.
-readonly struct Name : IEquatable<Name>
+readonly struct Name : IEquatable<Name>, ISpanFormattable
 {
     // By design, we treat _name == null the same as _name == byte[0] {}.
     private readonly byte[] _name;
@@ -22,6 +21,12 @@ readonly struct Name : IEquatable<Name>
     internal Name(string name)
     {
         _name = Encoding.ASCII.GetBytes(name);
+    }
+
+    internal Name(ReadOnlySpan<char> name)
+    {
+        _name = new byte[Encoding.ASCII.GetByteCount(name)];
+        Encoding.ASCII.GetBytes(name, _name);
     }
 
     public static bool TryCreate(byte[] bytes, out Name name)
@@ -80,6 +85,12 @@ readonly struct Name : IEquatable<Name>
     }
 
     public ReadOnlySpan<byte> AsSpan() => _name;
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+        => Encoding.UTF8.TryGetChars(_name, destination, out charsWritten);
+
+    public string ToString(string? format, IFormatProvider? formatProvider)
+        => ToString();
 
     public bool IsEmpty => _name == null || _name.Length == 0;
 }

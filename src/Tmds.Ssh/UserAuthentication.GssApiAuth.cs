@@ -15,27 +15,27 @@ namespace Tmds.Ssh;
 partial class UserAuthentication
 {
     // https://datatracker.ietf.org/doc/html/rfc4462 - GSS-API User Authentication
-    sealed class GssApiAuth
+    public sealed class GssApiAuth
     {
         // Kerberos - 1.2.840.113554.1.2.2 - This is DER encoding of the OID.
         private static readonly byte[] KRB5_OID = [0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x12, 0x01, 0x02, 0x02];
 
-        public static async Task<bool> TryAuthenticate(KerberosCredential credential, UserAuthContext context, SshConnectionInfo connectionInfo, ILogger logger, CancellationToken ct)
+        public static async Task<bool> TryAuthenticate(KerberosCredential credential, UserAuthContext context, SshConnectionInfo connectionInfo, ILogger<SshClient> logger, CancellationToken ct)
         {
-            if (!context.IsAuthenticationAllowed(AlgorithmNames.GssApiWithMic))
+            if (!context.TryStartAuth(AlgorithmNames.GssApiWithMic))
             {
                 return false;
             }
 
             // RFC uses hostbased SPN format "service@host" but Windows SSPI needs the service/host format.
             // .NET converts this format to the hostbased format expected by GSSAPI for us.
-            string spn = string.IsNullOrEmpty(credential.ServiceName) ? $"host/{connectionInfo.Host}" : credential.ServiceName;
+            string targetName = !string.IsNullOrEmpty(credential.TargetName) ? credential.TargetName : $"host/{connectionInfo.HostName}";
             NetworkCredential networkCredential = credential.NetworkCredential ?? CredentialCache.DefaultNetworkCredentials;
 
             // The SSH messages must have a username value which maps to the target user we want to login as. We use the
             // client supplied username as the target user. The Kerberos principal credential is only used for the
             // authentication stage that happens next.
-            logger.AuthenticationMethodGssapiWithMic(context.UserName, networkCredential.UserName, spn, credential.DelegateCredential);
+            logger.GssApiWithMicAuth(networkCredential.UserName, targetName, credential.DelegateCredential);
 
             bool isOidSuccess = await TryStageOid(context, logger, context.UserName, ct).ConfigureAwait(false);
             if (!isOidSuccess)
@@ -57,7 +57,7 @@ partial class UserAuthentication
                 // fails if it's not true. I'm unsure if openssh-portable on Linux
                 // will fail in the same way or not.
                 RequireMutualAuthentication = true,
-                TargetName = spn
+                TargetName = targetName
             };
 
             using var authContext = new AsyncNegotiateAuthentication(negotiateOptions);
@@ -99,7 +99,6 @@ partial class UserAuthentication
 
                 if (messageId == MessageId.SSH_MSG_USERAUTH_FAILURE)
                 {
-                    logger.AuthenticationKerberosFailed("No OID response received");
                     return false;
                 }
                 else if (messageId != MessageId.SSH_MSG_USERAUTH_GSSAPI_RESPONSE)
@@ -114,14 +113,13 @@ partial class UserAuthentication
                 }
                 else
                 {
-                    string receivedOid = Convert.ToBase64String(oidResponse.IsSingleSegment ? oidResponse.FirstSpan : oidResponse.ToArray());
-                    logger.AuthenticationKerberosFailed($"OID response {receivedOid} did not match expected value");
+                    ThrowHelper.ThrowProtocolUnexpectedValue();
                     return false;
                 }
             }
         }
 
-        private static async Task<bool> TryStageAuthentication(UserAuthContext context, ILogger logger, AsyncNegotiateAuthentication authContext, CancellationToken ct)
+        private static async Task<bool> TryStageAuthentication(UserAuthContext context, ILogger<SshClient> logger, AsyncNegotiateAuthentication authContext, CancellationToken ct)
         {
             (byte[]? outToken, NegotiateAuthenticationStatusCode statusCode) = await authContext.GetOutgoingBlobAsync(Array.Empty<byte>(), ct);
 
@@ -155,7 +153,7 @@ partial class UserAuthentication
             }
             else
             {
-                logger.AuthenticationKerberosFailed($"Kerberos authentication failed with status {statusCode}");
+                logger.GssApiWithMicFail(statusCode);
                 return false;
             }
         }
