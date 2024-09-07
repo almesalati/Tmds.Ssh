@@ -1,11 +1,6 @@
 // This file is part of Tmds.Ssh which is released under MIT.
 // See file LICENSE for full license details.
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.IO;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
@@ -368,7 +363,7 @@ public sealed partial class SftpClient : IDisposable
     public async ValueTask DownloadFileAsync(string remoteFilePath, string localFilePath, bool overwrite = false, CancellationToken cancellationToken = default)
     {
         var channel = await GetChannelAsync(cancellationToken).ConfigureAwait(false);
-        await channel.DownloadFileAsync(remoteFilePath, localFilePath, length: null, overwrite, permissions: null, cancellationToken);
+        await channel.DownloadFileAsync(remoteFilePath, localFilePath, overwrite, cancellationToken);
     }
 
     private ObjectDisposedException NewObjectDisposedException()

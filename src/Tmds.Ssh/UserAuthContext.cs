@@ -1,10 +1,6 @@
 // This file is part of Tmds.Ssh which is released under MIT.
 // See file LICENSE for full license details.
 
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
 namespace Tmds.Ssh;
@@ -44,6 +40,11 @@ sealed class UserAuthContext
         while (true)
         {
             var packet = await _connection.ReceivePacketAsync(ct, maxLength);
+            if (packet.IsEmpty)
+            {
+                ThrowHelper.ThrowProtocolUnexpectedPeerClose();
+            }
+
             MessageId messageId = packet.MessageId!.Value;
 
             if (messageId == MessageId.SSH_MSG_USERAUTH_BANNER)

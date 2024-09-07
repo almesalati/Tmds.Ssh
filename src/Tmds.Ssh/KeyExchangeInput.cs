@@ -1,15 +1,12 @@
 // This file is part of Tmds.Ssh which is released under MIT.
 // See file LICENSE for full license details.
 
-using System.Collections.Generic;
-
 namespace Tmds.Ssh;
 
 // POCO input for IKeyExchangeAlgorithm.TryExchangeAsync
 sealed class KeyExchangeInput
 {
     public KeyExchangeInput(IReadOnlyList<Name> hostKeyAlgorithms,
-        ReadOnlyPacket exchangeInitMsg,
         ReadOnlyPacket clientKexInitMsg,
         ReadOnlyPacket serverKexInitMsg,
         SshConnectionInfo connectionInfo,
@@ -22,7 +19,6 @@ sealed class KeyExchangeInput
         int minimumRSAKeySize)
     {
         HostKeyAlgorithms = hostKeyAlgorithms;
-        ExchangeInitMsg = exchangeInitMsg;
         ClientKexInitMsg = clientKexInitMsg;
         ServerKexInitMsg = serverKexInitMsg;
         ConnectionInfo = connectionInfo;
@@ -36,7 +32,6 @@ sealed class KeyExchangeInput
     }
 
     public IReadOnlyList<Name> HostKeyAlgorithms { get; set; }
-    public ReadOnlyPacket ExchangeInitMsg { get; set; }
     public ReadOnlyPacket ClientKexInitMsg { get; set; }
     public ReadOnlyPacket ServerKexInitMsg { get; set; }
     public SshConnectionInfo ConnectionInfo { get; set; }

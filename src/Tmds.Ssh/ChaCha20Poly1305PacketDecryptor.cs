@@ -1,19 +1,18 @@
 // This file is part of Tmds.Ssh which is released under MIT.
 // See file LICENSE for full license details.
 
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 
 namespace Tmds.Ssh;
 
-sealed class ChaCha20Poly1305PacketDecoder : ChaCha20Poly1305PacketEncDecBase, IPacketDecoder
+sealed class ChaCha20Poly1305PacketDecryptor : ChaCha20Poly1305PacketEncDecBase, IPacketDecryptor
 {
     private readonly SequencePool _sequencePool;
     private int _currentPacketLength = -1;
 
-    public ChaCha20Poly1305PacketDecoder(SequencePool sequencePool, byte[] key) :
+    public ChaCha20Poly1305PacketDecryptor(SequencePool sequencePool, byte[] key) :
         base(key)
     {
         _sequencePool = sequencePool;
@@ -22,7 +21,7 @@ sealed class ChaCha20Poly1305PacketDecoder : ChaCha20Poly1305PacketEncDecBase, I
     public void Dispose()
     { }
 
-    public bool TryDecodePacket(Sequence receiveBuffer, uint sequenceNumber, int maxLength, out Packet packet)
+    public bool TryDecrypt(Sequence receiveBuffer, uint sequenceNumber, int maxLength, out Packet packet)
     {
         packet = new Packet(null);
 

@@ -1,12 +1,6 @@
 // This file is part of Tmds.Ssh which is released under MIT.
 // See file LICENSE for full license details.
 
-using System;
-using System.Buffers;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Tmds.Ssh;
 
 // Represents an established connection.
@@ -27,5 +21,5 @@ abstract class SshConnection : IDisposable
     public abstract ValueTask<Packet> ReceivePacketAsync(CancellationToken ct, int maxLength = Constants.PreAuthMaxPacketLength);
     public abstract ValueTask SendPacketAsync(Packet packet, CancellationToken ct);
     public abstract void Dispose();
-    public abstract void SetEncoderDecoder(IPacketEncoder packetEncoder, IPacketDecoder packetDecoder);
+    public abstract void SetEncryptorDecryptor(IPacketEncryptor packetEncoder, IPacketDecryptor packetDecoder);
 }
