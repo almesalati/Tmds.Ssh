@@ -28,7 +28,7 @@ using Microsoft.Extensions.Logging;
 using Tmds.Ssh;
 
 using ILoggerFactory loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-using var sshClient = new SshClient("localhost", loggerFactory);
+using var sshClient = new SshClient("localhost", SshConfigSettings.DefaultConfig, loggerFactory);
 using var process = await sshClient.ExecuteAsync("echo 'hello world!'");
 (bool isError, string? line) = await process.ReadLineAsync();
 Console.WriteLine(line);
@@ -40,6 +40,14 @@ $ dotnet run
 hello world!
 ```
 
+## Examples
+
+The following are some example projects that show how Tmds.Ssh can be used:
+
+- [scp](./examples/scp) - SCP client to copy/fetch files
+- [ssh](./examples/ssh) - SSH client
+- [azure_key](./examples/azure_key) - SSH client with private keys stored in Azure Key Vault.
+
 ## API
 
 ```cs
@@ -47,8 +55,11 @@ namespace Tmds.Ssh;
 
 class SshClient : IDisposable
 {
-  SshClient(string destination, ILoggerFactory? loggerFactory = null); // uses SshConfigOptions.DefaultConfig.
-  SshClient(string destination, SshConfigOptions configOptions, ILoggerFactory? loggerFactory = null);
+  // Connect to the destination. No additional config.
+  SshClient(string destination, ILoggerFactory? loggerFactory = null);
+  // Use OpenSSH config files and options to configure the client.
+  SshClient(string destination, SshConfigSettings configSettings, ILoggerFactory? loggerFactory = null);
+  // Use the .NET SshClientSettings API to configure the client.
   SshClient(SshClientSettings settings, ILoggerFactory? loggerFactory = null);
 
   // Calling ConnectAsync is optional when SshClientSettings.AutoConnect is set (default).
@@ -111,7 +122,8 @@ class SftpClient : IDisposable
   const UnixFilePermissions DefaultCreateFilePermissions;      // = '-rwxrwxrwx'.
 
   // The SftpClient owns the connection.
-  SftpClient(string destination, SshConfigOptions configOptions, ILoggerFactory? loggerFactory = null, SftpClientOptions? options = null);
+  SftpClient(string destination, ILoggerFactory? loggerFactory = null, SftpClientOptions? options = null);
+  SftpClient(string destination, SshConfigSettings configSettings, ILoggerFactory? loggerFactory = null, SftpClientOptions? options = null);
   SftpClient(SshClientSettings settings, ILoggerFactory? loggerFactory = null, SftpClientOptions? options = null);
 
   // The SshClient owns the connection.
@@ -222,13 +234,14 @@ class SshClientSettings
 
   IReadOnlyDictionary<string, string>? EnvironmentVariables { get; set; }
 }
-class SshConfigOptions
+class SshConfigSettings
 {
-  static SshConfigOptions DefaultConfig { get; }  // use DefaultConfigFilePaths.
-  static SshConfigOptions NoConfig { get; } // use [ ]
+  static SshConfigSettings DefaultConfig { get; }  // use DefaultConfigFilePaths.
+  static SshConfigSettings NoConfig { get; } // use [ ]
   static IReadOnlyList<string> DefaultConfigFilePaths { get; } // [ '~/.ssh/config', '/etc/ssh/ssh_config' ]
 
   IReadOnlyList<string> ConfigFilePaths { get; set; }
+  IReadOnlyDictionary<SshConfigOption, SshConfigOptionValue> Options { get; set; }
 
   TimeSpan ConnectTimeout { get; set; } // = 15s, overridden by config timeout (if set)
 
@@ -236,6 +249,41 @@ class SshConfigOptions
   bool AutoReconnect { get; set; }
 
   HostAuthentication? HostAuthentication { get; set; } // Called for Unknown when StrictHostKeyChecking is 'ask' (default)
+}
+public enum SshConfigOption
+{
+    Hostname,
+    User,
+    Port,
+    ConnectTimeout,
+    GlobalKnownHostsFile,
+    UserKnownHostsFile,
+    HashKnownHosts,
+    StrictHostKeyChecking,
+    PreferredAuthentications,
+    PubkeyAuthentication,
+    IdentityFile,
+    GSSAPIAuthentication,
+    GSSAPIDelegateCredentials,
+    GSSAPIServerIdentity,
+    RequiredRSASize,
+    SendEnv,
+    Ciphers,
+    HostKeyAlgorithms,
+    KexAlgorithms,
+    MACs,
+    PubkeyAcceptedAlgorithms
+}
+struct SshConfigOptionValue
+{
+    SshConfigOptionValue(string value);
+    SshConfigOptionValue(IEnumerable<string> values);
+    static implicit operator SshConfigOptionValue(string value);
+
+    bool IsEmpty { get; }
+    bool IsSingleValue { get; }
+    string? FirstValue { get; }
+    IEnumerable<string> Values { get; }
 }
 class SftpClientOptions
 { }
@@ -394,8 +442,20 @@ abstract class Credential
 { }
 class PrivateKeyCredential : Credential
 {
-  PrivateKeyCredential(string path, string? password = null);
-  PrivateKeyCredential(string path, Func<string?> passwordPrompt);
+  PrivateKeyCredential(string path, string? password = null, string? identifier ??= path);
+  PrivateKeyCredential(string path, Func<string?> passwordPrompt, string? identifier ??= path);
+
+  PrivateKeyCredential(char[] rawKey, string? password = null, string identifier = "[raw key]");
+  PrivateKeyCredential(char[] rawKey, Func<string?> passwordPrompt, string identifier = "[raw key]");
+
+  // Enable derived classes to use private keys from other sources.
+  protected PrivateKeyCredential(Func<CancellationToken, ValueTask<Key>> loadKey, string identifier);
+  protected struct Key
+  {
+    Key(RSA rsa);
+    Key(ECDsa ecdsa);
+    Key(ReadOnlyMemory<char> rawKey, Func<string?>? passwordPrompt = null);
+  }
 }
 class PasswordCredential : Credential
 {
@@ -435,6 +495,7 @@ Supported private key encryption cyphers:
 - OpenSSH Keys `OPENSSH PRIVATE KEY` (`openssh-key-v1`)
   - aes[128|192|256]-[cbc|ctr]
   - aes[128|256]-gcm@openssh.com
+  - chacha20-poly1305@openssh.com
 
 Supported client key algorithms:
 - ssh-ed25519

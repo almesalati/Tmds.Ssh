@@ -16,7 +16,7 @@ sealed partial class SshSession
 
     private readonly SshClient _client;
     private readonly string? _destination;
-    private readonly SshConfigOptions? _sshConfigOptions;
+    private readonly SshConfigSettings? _sshConfigOptions;
     private readonly object _gate = new object();
     private readonly CancellationTokenSource _abortCts;    // Used to stop all operations
     private SshClientSettings? _settings;
@@ -38,13 +38,13 @@ sealed partial class SshSession
     internal SshSession(
         SshClientSettings? settings,
         string? destination,
-        SshConfigOptions? configOptions, SshClient client, SshLoggers loggers)
+        SshConfigSettings? configSettings, SshClient client, SshLoggers loggers)
     {
         _abortCts = new CancellationTokenSource();
 
         _settings = settings;
         _destination = destination;
-        _sshConfigOptions = configOptions;
+        _sshConfigOptions = configSettings;
 
         ConnectionInfo = new SshConnectionInfo();
 
@@ -139,7 +139,13 @@ sealed partial class SshSession
             else
             {
                 Debug.Assert(_destination is not null);
+                Debug.Assert(_sshConfigOptions is not null);
                 (userName, host, port) = SshClientSettings.ParseDestination(_destination);
+
+                if (string.IsNullOrEmpty(host) && _sshConfigOptions.Options.TryGetValue(SshConfigOption.Hostname, out SshConfigOptionValue value))
+                {
+                    host = value.FirstValue ?? "";
+                }
             }
             ConnectionInfo.HostName = host;
             ConnectionInfo.Port = port ?? 22;
